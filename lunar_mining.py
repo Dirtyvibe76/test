@@ -335,6 +335,7 @@ class ISRUFacility:
             'water_produced_kg': 0,
             'oxygen_produced_kg': 0,
             'power_utilization': 0,
+            'total_power_needed_kW': 0,
         }
         
         # Calculate mining capacity
@@ -358,7 +359,12 @@ class ISRUFacility:
             results['oxygen_from_water_kg'] = water_yield * 0.889
         
         # Oxygen production from regolith
-        oxygen_from_regolith = self.oxygen_producer.calculate_oxygen_yield(regolith_mass * 0.5)
+        # Split regolith: 50% for oxygen production, 50% reserved for other uses
+        # This factor can be adjusted based on facility configuration
+        regolith_fraction_for_oxygen = 0.5
+        oxygen_from_regolith = self.oxygen_producer.calculate_oxygen_yield(
+            regolith_mass * regolith_fraction_for_oxygen
+        )
         results['oxygen_produced_kg'] = oxygen_from_regolith
         
         # Total oxygen
@@ -367,10 +373,29 @@ class ISRUFacility:
         else:
             results['total_oxygen_kg'] = oxygen_from_regolith
             
-        # Calculate actual power usage
+        # Calculate actual power usage including all processes
         total_power_needed = mining_power
+        
+        # Add water extraction power (if applicable)
+        if self.water_extractor and water_yield > 0:
+            # Approximate power for water extraction (heating + sublimation)
+            water_extraction_power = (
+                self.water_extractor.calculate_energy_requirement(water_yield) / duration / 3.6
+            )  # Convert MJ to kW
+            total_power_needed += water_extraction_power
+        
+        # Add oxygen production power
+        if oxygen_from_regolith > 0:
+            oxygen_production_power = self.oxygen_producer.calculate_power_requirement(
+                oxygen_from_regolith / duration
+            )
+            total_power_needed += oxygen_production_power
+        
+        # Calculate power utilization
         if total_power_needed > 0:
             results['power_utilization'] = min(1.0, power_available / total_power_needed)
+        
+        results['total_power_needed_kW'] = total_power_needed
         
         return results
     
